@@ -21,7 +21,11 @@ contract MyEpicGame is ERC721 {
     );
 
     // Event to check if the attack was complete or not
-    event AttackComplete(address sender, uint newBossHp, uint newPlayerHp);
+    event AttackComplete(
+        address sender,
+        uint256 newBossHp,
+        uint256 newPlayerHp
+    );
 
     // specifying all the functions from library are attached to Counter type
     using Counters for Counters.Counter;
@@ -33,7 +37,7 @@ contract MyEpicGame is ERC721 {
     This is the struct that will represent the characters of our game characters
     characterIndex - represent the charater of the game
     name - represent the name of the character
-    imageURI - image og the character
+    imageURI - image of the character
     hp - represent the horse power
     maxHp - represent the max power
     attack damage - represent the max attack damage
@@ -71,9 +75,9 @@ contract MyEpicGame is ERC721 {
     struct BigBoss {
         string name;
         string imageURI;
-        uint hp;
-        uint maxHp;
-        uint attackDamage;
+        uint256 hp;
+        uint256 maxHp;
+        uint256 attackDamage;
     }
 
     // a boss variable to hold the data of our the boss
@@ -87,9 +91,12 @@ contract MyEpicGame is ERC721 {
         uint256[] memory characterMaxDmg,
         string memory bossName,
         string memory bossImageURI,
-        uint bossHp,
-        uint bossAttackDamage
+        uint256 bossHp,
+        uint256 bossAttackDamage
     ) ERC721("End Game", "MCQ") {
+        require((characterNames.length == characterImageURI.length) == 
+                (characterHp.length == characterMaxDmg.length), 
+                "character properties incomplete");
         // Initialize the boss. Save it to our global "bigBoss" state variable.
         bigBoss = BigBoss({
             name: bossName,
@@ -120,9 +127,9 @@ contract MyEpicGame is ERC721 {
                 })
             );
 
-            // console logging the characters in order ot check if they are initialized properly or not
+            // console logging the characters in order to check if they are initialized properly or not
             CharacterAttributes memory c = defaultCharacters[i];
-            // Using harhdta console
+            // Using hardhat console
             console.log(
                 "Done initializing %s w/ HP %s, img %s",
                 c.name,
@@ -146,7 +153,7 @@ contract MyEpicGame is ERC721 {
 
         // updating the mapping for tokenId=> attributes
         // As the palyers attack each other we need to change their hp according to the damage
-        // therefore we need the data of all indivisual nft and we need a way to store this nft
+        // therefore we need the data of all individual nft and we need a way to store this nft
         // or if we want to upgrade our character by giving it a sword
         nftHolderAttributes[newItemId] = CharacterAttributes({
             characterIndex: _characterIndex,
@@ -274,7 +281,7 @@ contract MyEpicGame is ERC721 {
         console.log("Boss attacked player. New player hp: %s\n", player.hp);
     }
 
-    // This is the function to check if the user has any minted nft previouly
+    // This is the function to check if the user has any minted nft previously
     function checkIfUserHasNFT()
         public
         view
@@ -293,7 +300,7 @@ contract MyEpicGame is ERC721 {
         }
     }
 
-    //function to get all the characters
+    // function to get all the characters
     function getAllDefaultCharacters()
         public
         view
@@ -302,7 +309,7 @@ contract MyEpicGame is ERC721 {
         return defaultCharacters;
     }
 
-    // function to pay the boss
+    // function to return the boss
     function getBigBoss() public view returns (BigBoss memory) {
         return bigBoss;
     }
