@@ -26,12 +26,32 @@ contract MyEpicGame is ERC721 {
         uint256 newBossHp,
         uint256 newPlayerHp
     );
+    // emits when a new character's attributes is added to the game
+    event NewCharacter(
+        uint256 characterIndex,
+        string name,
+        string imageURI,
+        uint256 hp,
+        uint256 maxHp,
+        uint256 attackDamage
+    );
+
 
     // specifying all the functions from library are attached to Counter type
     using Counters for Counters.Counter;
 
     // Counter to count the token id
     Counters.Counter private _tokenIds;
+
+    // Counter for character index
+    Counters.Counter private _characterId;
+
+    // Limiter set to for number of characters created
+    // This is not a limiter for minting a specific character
+    uint charactersLimit;
+
+
+    address owner;
 
     /*
     This is the struct that will represent the characters of our game characters
@@ -43,7 +63,6 @@ contract MyEpicGame is ERC721 {
     attack damage - represent the max attack damage
      */
     struct CharacterAttributes {
-        uint256 characterIndex;
         string name;
         string imageURI;
         uint256 hp;
@@ -51,7 +70,7 @@ contract MyEpicGame is ERC721 {
         uint256 attackDamage;
     }
     // An array to store default data for characters of the game
-    CharacterAttributes[] defaultCharacters;
+    mapping(uint => CharacterAttributes) private defaultCharacters;
 
     // A mapping for a particular nft token id to its character attributes
     mapping(uint256 => CharacterAttributes) public nftHolderAttributes;
@@ -83,20 +102,24 @@ contract MyEpicGame is ERC721 {
     // a boss variable to hold the data of our the boss
     BigBoss public bigBoss;
 
+    // initialises a boss for individual players
+    mapping(uint => BigBoss) bossInstances;
+
     // Initializing the charaters of the game and boss during run time
     constructor(
-        string[] memory characterNames,
-        string[] memory characterImageURI,
-        uint256[] memory characterHp,
-        uint256[] memory characterMaxDmg,
+        uint _charactersLimit,
         string memory bossName,
         string memory bossImageURI,
         uint256 bossHp,
         uint256 bossAttackDamage
     ) ERC721("End Game", "MCQ") {
-        require((characterNames.length == characterImageURI.length) == 
-                (characterHp.length == characterMaxDmg.length), 
-                "character properties incomplete");
+        require(
+            bytes(bossName).length > 0 &&
+                bytes(bossImageURI).length > 0,
+            "Invalid boss metadata"
+        );
+        require(bossHp > 0 && bossAttackDamage > 0,"Invalid boss combat's properties");
+        charactersLimit = _charactersLimit;
         // Initialize the boss. Save it to our global "bigBoss" state variable.
         bigBoss = BigBoss({
             name: bossName,
@@ -105,49 +128,43 @@ contract MyEpicGame is ERC721 {
             maxHp: bossHp,
             attackDamage: bossAttackDamage
         });
-
-        // console logging to check if the boss initialized correctly or not
-        console.log(
-            "Done initializing boss %s w/ HP %s, img %s",
-            bigBoss.name,
-            bigBoss.hp,
-            bigBoss.imageURI
-        );
-
-        // Initializing the characters and pushing them to the array
-        for (uint256 i = 0; i < characterNames.length; i++) {
-            defaultCharacters.push(
-                CharacterAttributes({
-                    characterIndex: i,
-                    name: characterNames[i],
-                    imageURI: characterImageURI[i],
-                    hp: characterHp[i],
-                    maxHp: characterHp[i],
-                    attackDamage: characterMaxDmg[i]
-                })
-            );
-
-            // console logging the characters in order to check if they are initialized properly or not
-            CharacterAttributes memory c = defaultCharacters[i];
-            // Using hardhat console
-            console.log(
-                "Done initializing %s w/ HP %s, img %s",
-                c.name,
-                c.hp,
-                c.imageURI
-            );
-        }
+        owner = msg.sender;
 
         // i am increamenting the tokenid here so that my first nft has a token id of 1
         _tokenIds.increment();
     }
+    // allows the game owner to add a new character's attributes to the game
+    function addCharacter(string memory _name, string memory _imageURI, uint _hp, uint _attackDamage) public {
+        require(charactersLimit >  _characterId.current(), "You can't add anymore characters");
+        require(owner == msg.sender, "Unauthorized user");
+        require(
+            bytes(_name).length > 0 &&
+            bytes(_imageURI).length > 0,
+            "Invalid character metadata"
+        );
+        // ensures competitiveness is kept
+        require(_hp > 0 && (bigBoss.maxHp / _hp) <= 3, "Hp has to be less than or equal to a third of the boss's hp");
+        // ensures boss isn't unbeateable
+        require(_attackDamage > 0 && (bigBoss.attackDamage / _attackDamage) <= 3, "Invalid character damage");
+        uint id =  _characterId.current();
+         _characterId.increment();
+         defaultCharacters[id] = CharacterAttributes(_name, _imageURI, _hp, _hp, _attackDamage);
+        emit  NewCharacter(id ,_name, _imageURI, _hp, _hp, _attackDamage);
+    }
+    // allows the game owner to increase the characters limit to add a new character to the game
+    function increaseCharactersLimit() public {
+        require(owner == msg.sender, "Unauthorized user");
+        require(_characterId.current() == charactersLimit, "You are only allowed to increase the charactersLimit after it has been reached");
+        charactersLimit += 1;
+    }
+
 
     // User will be able to hit this function and mint their nft
-    // using the index because we want the user to choose which charater they want to mint
+    // using the index because we want the user to choose which character they want to mint
     function mintCharacterNFT(uint256 _characterIndex) external {
         // getting the current tokenid
         uint256 newItemId = _tokenIds.current();
-
+        require(_characterIndex < _characterId.current(), "Query of non existent character's attribute");
         // minting the tokenid through safemint
         _safeMint(msg.sender, newItemId);
 
@@ -156,7 +173,6 @@ contract MyEpicGame is ERC721 {
         // therefore we need the data of all individual nft and we need a way to store this nft
         // or if we want to upgrade our character by giving it a sword
         nftHolderAttributes[newItemId] = CharacterAttributes({
-            characterIndex: _characterIndex,
             name: defaultCharacters[_characterIndex].name,
             imageURI: defaultCharacters[_characterIndex].imageURI,
             hp: defaultCharacters[_characterIndex].hp,
@@ -164,16 +180,11 @@ contract MyEpicGame is ERC721 {
             attackDamage: defaultCharacters[_characterIndex].attackDamage
         });
 
-        console.log(
-            "Minted NFT w/ tokenId %s and characterIndex %s",
-            newItemId,
-            _characterIndex
-        );
+        bossInstances[newItemId] = bigBoss;
 
         // updating the mapping of address => NFT token id
         nftHolders[msg.sender] = newItemId;
-
-        //Increamenting the token id for the next person to use it
+        //Incrementing the token id for the next person to use it
         _tokenIds.increment();
 
         emit CharacterNFTMinted(msg.sender, newItemId, _characterIndex);
@@ -241,6 +252,7 @@ contract MyEpicGame is ERC721 {
         CharacterAttributes storage player = nftHolderAttributes[
             nftTokenIdOfPlayer
         ];
+        BigBoss storage boss = bossInstances[nftTokenIdOfPlayer];
         console.log(
             "\nPlayer w/ character %s about to attack. Has %s HP and %s AD",
             player.name,
@@ -249,35 +261,35 @@ contract MyEpicGame is ERC721 {
         );
         console.log(
             "Boss %s has %s HP and %s AD",
-            bigBoss.name,
-            bigBoss.hp,
-            bigBoss.attackDamage
+            boss.name,
+            boss.hp,
+            boss.attackDamage
         );
 
         // makes sure the player has more than 0 hp
         require(player.hp > 0, "Error: character msut have hp to attack boss");
 
         // make sure the boss has more than 0 hp
-        require(bigBoss.hp > 0, "Error boss must have hp to attack characters");
+        require(boss.hp > 0, "Error boss must have hp to attack characters");
 
         // We are doing this because we are using uint
         // Allow player to attack boss.
-        if (bigBoss.hp < player.attackDamage) {
-            bigBoss.hp = 0;
+        if (boss.hp < player.attackDamage) {
+            boss.hp = 0;
         } else {
-            bigBoss.hp = bigBoss.hp - player.attackDamage;
+            boss.hp = boss.hp - player.attackDamage;
         }
 
         // Allow boss to attack player.
-        if (player.hp < bigBoss.attackDamage) {
+        if (player.hp < boss.attackDamage) {
             player.hp = 0;
         } else {
-            player.hp = player.hp - bigBoss.attackDamage;
+            player.hp = player.hp - boss.attackDamage;
         }
 
-        emit AttackComplete(msg.sender, bigBoss.hp, player.hp);
+        emit AttackComplete(msg.sender, boss.hp, player.hp);
         // Console for ease.
-        console.log("Player attacked boss. New boss hp: %s", bigBoss.hp);
+        console.log("Player attacked boss. New boss hp: %s", boss.hp);
         console.log("Boss attacked player. New player hp: %s\n", player.hp);
     }
 
@@ -300,17 +312,22 @@ contract MyEpicGame is ERC721 {
         }
     }
 
-    // function to get all the characters
+    // function to get all the available characters's attributes
     function getAllDefaultCharacters()
         public
         view
         returns (CharacterAttributes[] memory)
     {
-        return defaultCharacters;
+        CharacterAttributes[] memory characters = new CharacterAttributes[](_characterId.current());
+       for(uint i = 0; i < charactersLimit;i++){
+            characters[i] = defaultCharacters[i];
+       }
+
+       return characters;
     }
 
     // function to return the boss
-    function getBigBoss() public view returns (BigBoss memory) {
-        return bigBoss;
+    function getBigBoss(uint tokenId) public view returns (BigBoss memory) {
+        return bossInstances[tokenId];
     }
 }
