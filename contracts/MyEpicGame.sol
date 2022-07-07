@@ -152,20 +152,19 @@ contract MyEpicGame is ERC721 {
         emit  NewCharacter(id ,_name, _imageURI, _hp, _hp, _attackDamage);
     }
     // allows the game owner to increase the characters limit to add a new character to the game
-    function increaseCharactersLimit(uint amount) public {
+    function increaseCharactersLimit() public {
         require(owner == msg.sender, "Unauthorized user");
         require(_characterId.current() == charactersLimit, "You are only allowed to increase the charactersLimit after it has been reached");
-        require(amount >  charactersLimit, "new amount has to be greater than the current charactersLimit");
-        charactersLimit = amount;
+        charactersLimit += 1;
     }
 
 
     // User will be able to hit this function and mint their nft
-    // using the index because we want the user to choose which charater they want to mint
+    // using the index because we want the user to choose which character they want to mint
     function mintCharacterNFT(uint256 _characterIndex) external {
         // getting the current tokenid
         uint256 newItemId = _tokenIds.current();
-
+        require(_characterIndex < _characterId.current(), "Query of non existent character's attribute");
         // minting the tokenid through safemint
         _safeMint(msg.sender, newItemId);
 
